@@ -60,7 +60,7 @@ class DecisionTree:
             return Node(lambda x: np.full(x.shape[0], target[0]))
         if not attributes:
             return Node(lambda x: np.full(x.shape[0], np.argmax(np.bincount(target))))
-        best_attr = min(attributes, key=lambda attr: self.gain(data, target, attr))
+        best_attr = max(attributes, key=lambda attr: self.gain(data, target, attr))
         attributes.remove(best_attr)
         characteristic = best_attr(data)
         return Node(best_attr,
@@ -128,8 +128,9 @@ class DecisionTree:
         def mean_split_inner(data: NDArray, target: NDArray) -> set[Attribute]:
             ret = set()
             for i in range(data.shape[1]):
-                attr = NamedAttribute(f"Mean split on Attribute {i}, {np.linspace(data[:, i].min(), data[:, i].max(), splits)}", 
-                                    lambda x: np.digitize(x[:, i], np.linspace(data[:, i].min(), data[:, i].max(), splits)) - 1)
+                def lambda_(x: NDArray, i=i) -> NDArray:
+                    return np.digitize(x[:, i], np.linspace(data[:, i].min(), data[:, i].max(), splits)) - 1
+                attr = NamedAttribute(f"Mean split on Attribute {i}, {np.linspace(data[:, i].min(), data[:, i].max(), splits)}", lambda_)
                 ret.add(attr)
             return ret
         return mean_split_inner
@@ -139,8 +140,9 @@ class DecisionTree:
         def percentile_split_inner(data: NDArray, target: NDArray) -> set[Attribute]:
             ret = set()
             for i in range(data.shape[1]):
-                attr = NamedAttribute(f"Cluster split on Attribute {i}", 
-                                    lambda x: np.digitize(x[:, i], np.percentile(data[:, i], range(0, 101, 100 // splits))) - 1)
+                def lambda_(x: NDArray, i=i) -> NDArray:
+                    return np.digitize(x[:, i], np.percentile(data[:, i], range(0, 101, 100 // splits))) - 1
+                attr = NamedAttribute(f"Cluster split on Attribute {i}", lambda_)
                 ret.add(attr)
             return ret
         return percentile_split_inner
@@ -152,19 +154,17 @@ class DecisionTree:
             ret = set()
             for i in range(data.shape[1]):
                 midpts = (data[:, i][1:] + data[:, i][:-1]) / 2
-                n = midpts.shape[0]
-                mask = np.bincount([n * i // k for i in range (1, k)])
-                mask = np.pad(mask, (0, n - mask.shape[0]), 'constant', constant_values=(0, 0)) == 1
-                midpts = midpts[mask]
-                midpts.sort()
+                percentiles = np.percentile(data[:, i], np.linspace(0, 100, k + 1)[1:-1])
+                midpts = np.unique(percentiles)
                 cms = tuple(combinations(midpts, splits))
                 mapping = []
                 for midpt in cms:
                     mapping.append(gain(data, target, 
                                         lambda x: np.digitize(x[:, i], midpt)))
                 midpt = cms[np.argmax(mapping)]
-                attr = NamedAttribute(f"Split on Attribute {i} > {midpt}", 
-                                    lambda x: np.digitize(x[:, i], midpt))
+                def lambda_(x: NDArray, i=i, midpt=midpt) -> NDArray:
+                    return np.digitize(x[:, i], midpt)
+                attr = NamedAttribute(f"Split on Attribute {i} > {midpt}", lambda_)
                 ret.add(attr)
             return ret
         return split_based_on_gain_inner

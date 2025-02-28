@@ -10,6 +10,10 @@ target = dataset.target
 mask = np.random.rand(data.shape[0]) < 0.8
 train_data = data[mask]
 train_target = target[mask]
+# np.random.shuffle(data)
+# np.random.shuffle(target)
+# train_data = data[:10, :3]
+# train_target = target[:10]
 test_data = data[~mask]
 test_target = target[~mask]
 splits = 3
@@ -34,6 +38,22 @@ print(f"gini_index split_based_on_gain acc: {tree.score(test_data, test_target):
 # print(tree.score(train_data, train_target))
 
 from sklearn.tree import DecisionTreeClassifier
-clf = DecisionTreeClassifier()
+clf = DecisionTreeClassifier(max_depth=5)
 clf.fit(train_data, train_target)
 print(f"Sklearn acc: {clf.score(test_data, test_target):.3f}")
+# # show the tree
+# from sklearn.tree import plot_tree
+# import matplotlib.pyplot as plt
+# plt.figure(figsize=(10, 10))
+# plot_tree(clf, filled=True) 
+# plt.show()
+from sklearn.ensemble import RandomForestClassifier
+clf = RandomForestClassifier(n_estimators=100)
+clf.fit(train_data, train_target)
+print(f"RandomForest acc: {clf.score(test_data, test_target):.3f}")
+
+# from autogluon.tabular import TabularDataset, TabularPredictor
+# train_data = TabularDataset(train_data, train_target)
+# test_data = TabularDataset(test_data, test_target)
+# predictor = TabularPredictor(label='target').fit(train_data)
+# print(f"AutoGluon acc: {predictor.evaluate(test_data):.3f}")
