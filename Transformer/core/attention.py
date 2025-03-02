@@ -14,9 +14,9 @@ class MultiHeadAttention(torch.nn.Module):
         self.WQ = torch.nn.Linear(d_model, d_model, bias=False)
         self.WK = torch.nn.Linear(d_model, d_model, bias=False)
         self.WV = torch.nn.Linear(d_model, d_model, bias=False)
-        self.W_Qi = [torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)]
-        self.W_Ki = [torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)]
-        self.W_Vi = [torch.nn.Linear(d_model, self.__d_v, bias=False) for _ in range(n_head)]
+        self.W_Qi = torch.nn.ModuleList([torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)])
+        self.W_Ki = torch.nn.ModuleList([torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)])
+        self.W_Vi = torch.nn.ModuleList([torch.nn.Linear(d_model, self.__d_v, bias=False) for _ in range(n_head)])
         self.output_linear = torch.nn.Linear(n_head * self.__d_v, d_model, bias=False)
     
     def forward(self, x, mask=None):
@@ -51,8 +51,9 @@ class EncoderDecoderAttention(torch.nn.Module):
         self.__d_k = d_model // n_head
         self.__sqrt_d_k = self.__d_k ** 0.5
         self.__d_v = d_model // n_head
-        self.future_mask = torch.triu(torch.ones((seq_len, seq_len), dtype=torch.uint8), diagonal=1).\
+        future_mask = torch.triu(torch.ones((seq_len, seq_len), dtype=torch.uint8), diagonal=1).\
             unsqueeze(0).unsqueeze(0).expand(1, n_head, -1, -1)
+        self.register_buffer("future_mask", future_mask)
         self.WQ = torch.nn.Linear(d_model, d_model, bias=False)
         self.WK = torch.nn.Linear(d_model, d_model, bias=False)
         self.WV = torch.nn.Linear(d_model, d_model, bias=False)

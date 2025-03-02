@@ -7,12 +7,13 @@ class PositionalEncodingLayer(torch.nn.Module):
         super().__init__()
         self.__d_model = d_model
         self.__seq_len = seq_len
-        self.matrix = torch.zeros((seq_len, d_model))
+        matrix = torch.zeros((seq_len, d_model))
         for pos in range(seq_len):
             for i in range(0, d_model, 2):
-                self.matrix[pos, i] = math.sin(pos / (10000 ** (i / d_model)))
-                self.matrix[pos, i + 1] = math.cos(pos / (10000 ** (i / d_model)))
-        self.matrix = self.matrix.unsqueeze(0)
+                matrix[pos, i] = math.sin(pos / (10000 ** (i / d_model)))
+                matrix[pos, i + 1] = math.cos(pos / (10000 ** (i / d_model)))
+        matrix = matrix.unsqueeze(0)
+        self.register_buffer("matrix", matrix)
 
     def forward(self, x):
         return x + self.matrix

@@ -1,9 +1,12 @@
 import torch
 from core import *
 
-def gen_data(batch_size=32, seq_len=64, seed=None):
+def gen_data(batch_size=32, seq_len=64, seed=None, device=None):
+    seq_len += 1
     if seed is not None:
         torch.manual_seed(seed)
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # FROM vocab: lower letters
     # TO vocab: upper letters
     from_vocab = "abcdefghijklmnopqrstuvwxyz"
@@ -38,8 +41,9 @@ def gen_data(batch_size=32, seq_len=64, seed=None):
             _i, _o = gen_pair()
             _input.append(_i)
             _output.append(_o)
-        return torch.tensor(_input), torch.tensor(_output)
-    def gen_loader():
-        return torch.utils.data.DataLoader(gen_batch(batch_size * 128), batch_size=batch_size)
-    return gen_loader(), gen_loader(), vocab_size
+        return torch.utils.data.TensorDataset(torch.tensor(_input).to(device), \
+            torch.tensor(_output).to(device))
+    def gen_loader(scale):
+        return torch.utils.data.DataLoader(gen_batch(scale * batch_size), batch_size=batch_size, shuffle=True)
+    return gen_loader(128), gen_loader(16), vocab_size
 
