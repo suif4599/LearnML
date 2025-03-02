@@ -1,0 +1,6 @@
+SOS = 0
+EOS = 1
+PAD = 2
+UNK = 3
+
+START_INDEX = 4
