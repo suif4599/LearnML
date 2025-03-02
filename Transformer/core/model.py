@@ -42,8 +42,8 @@ class TransformerTranslator(torch.nn.Module):
             t = time()
             for _input, _output in train_loader:
                 optimizer.zero_grad()
-                output = self(_input, _output)
-                loss = loss_fn(output, _output)
+                output = self(_input[:, :-1], _output[:, :-1])
+                loss = loss_fn(output.view(-1, output.size(-1)), _output[:, 1:].contiguous().view(-1))
                 loss.backward()
                 optimizer.step()
             self.eval()
@@ -51,8 +51,8 @@ class TransformerTranslator(torch.nn.Module):
             with torch.no_grad():
                 total_loss = 0
                 for _input, _output in test_loader:
-                    output = self(_input, _output)
-                    loss = loss_fn(output, _output)
+                    output = self(_input[:, :-1], _output[:, :-1])
+                    loss = loss_fn(output.view(-1, output.size(-1)), _output[:, 1:].contiguous().view(-1))
                     total_loss += loss.item()
                 print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(test_loader):.2f}")
                 t_test = time() - t_train - t
