@@ -44,7 +44,7 @@ class DecoderLayer(torch.nn.Module):
         self.__d_model = d_model
         self.__n_head = n_head
         self.__seq_len = seq_len
-        self.masked_multi_head_attention = MultiHeadAttention(d_model, n_head)
+        self.masked_multi_head_attention = MultiHeadAttention(d_model, n_head, seq_len, True)
         self.add_and_norm1 = torch.nn.LayerNorm(d_model)
         self.encoder_decoder_attention = EncoderDecoderAttention(d_model, n_head, seq_len)
         self.add_and_norm2 = torch.nn.LayerNorm(d_model)
@@ -57,6 +57,6 @@ class DecoderLayer(torch.nn.Module):
     
     def forward(self, x, encoder_output, mask=None):
         x = self.add_and_norm1(x + self.masked_multi_head_attention(x, mask))
-        x = self.add_and_norm2(x + self.encoder_decoder_attention(x, encoder_output))
+        x = self.add_and_norm2(x + self.encoder_decoder_attention(x, encoder_output, mask))
         x = self.add_and_norm3(x + self.feed_forward(x))
         return x

@@ -104,7 +104,5 @@ class TransformerTranslator(torch.nn.Module):
                 output[:, i + 1] = EOS
                 break
             output[:, i + 1] = _output[:, i].item()
-        # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD)
-        # loss = loss_fn(_output.view(-1, _output.size(-1)), output[:, 1:].contiguous().view(-1))
         return output.squeeze(0).cpu().numpy()
     
