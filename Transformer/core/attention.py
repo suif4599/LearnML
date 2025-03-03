@@ -53,7 +53,7 @@ class EncoderDecoderAttention(torch.nn.Module):
         self.__d_v = d_model // n_head
         future_mask = torch.triu(torch.ones((seq_len, seq_len), dtype=torch.uint8), diagonal=1).\
             unsqueeze(0).unsqueeze(0).expand(1, n_head, -1, -1)
-        self.register_buffer("future_mask", future_mask)
+        self.register_buffer("future_mask", future_mask.clone())
         self.WQ = torch.nn.Linear(d_model, d_model, bias=False)
         self.WK = torch.nn.Linear(d_model, d_model, bias=False)
         self.WV = torch.nn.Linear(d_model, d_model, bias=False)
@@ -73,15 +73,16 @@ class EncoderDecoderAttention(torch.nn.Module):
             mask += self.future_mask
         else:
             mask = self.future_mask
-        q = self.WQ(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_k).transpose(1, 2)
+        q = self.WQ(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).transpose(1, 2)
         # q: (batch_size, n_head, seq_len, d_k)
         k_T = self.WK(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_k).permute(0, 2, 3, 1)
         # k_T: (batch_size, n_head, d_k, seq_len)
-        v = self.WV(x).view(x.size(0), x.size(1), self.__n_head, self.__d_v).transpose(1, 2)
+        v = self.WV(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_v).transpose(1, 2)
         # v: (batch_size, n_head, seq_len, d_v)
         scores = q @ k_T / self.__sqrt_d_k
         # scores: (batch_size, n_head, seq_len, seq_len)
         if mask is not None:
+            mask = mask[:, :, :, :scores.size(-1)]
             scores = scores.masked_fill(mask != 0, -1e9)
         attention = F.softmax(scores, dim=-1)
         context = attention @ v

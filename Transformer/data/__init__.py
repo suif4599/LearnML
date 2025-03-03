@@ -1,0 +1,1 @@
+from .data import gen_dict, tokenize

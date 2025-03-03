@@ -13,10 +13,11 @@ class PositionalEncodingLayer(torch.nn.Module):
                 matrix[pos, i] = math.sin(pos / (10000 ** (i / d_model)))
                 matrix[pos, i + 1] = math.cos(pos / (10000 ** (i / d_model)))
         matrix = matrix.unsqueeze(0)
-        self.register_buffer("matrix", matrix)
+        self.register_buffer("matrix", matrix.clone())
 
     def forward(self, x):
         return x + self.matrix
+        
 
 class EncoderLayer(torch.nn.Module):
     def __init__(self, d_model, n_head):
