@@ -1,6 +1,7 @@
 import os
 import torch
 import warnings
+from math import inf
 
 def check_existence():
     raw_data = os.path.join(os.path.dirname(__file__), "raw_data")
@@ -20,7 +21,8 @@ def check_existence():
         raise IsADirectoryError(f'"{test_path}" is a directory')
 
 def gen_dict(SOS, EOS, PAD, UNK, START_INDEX, batch_size=32, _eng_len=-1, _chn_len=-1, 
-             *, min_freq=None, max_vocab=None, device=None):
+             *, min_freq=None, max_vocab=None, device=None, 
+             max_eng_len=inf, max_chn_len=inf):
     # Check existence
     check_existence()
     if device is None:
@@ -35,7 +37,9 @@ def gen_dict(SOS, EOS, PAD, UNK, START_INDEX, batch_size=32, _eng_len=-1, _chn_l
         train_data = f.readlines()
     train_data = [cc.convert(line.strip()).split('\t') for line in train_data]
     # Tokenize
-    train_tokenized = [(eng.lower()[:-1].split() + list(eng[-1]), list(chn)) for eng, chn in train_data]
+    train_tokenized = [(eng.lower()[:-1].split() + list(eng[-1]), list(chn)) 
+                       for eng, chn in train_data
+                       if len(eng.lower().split()) <= max_eng_len and len(chn) <= max_chn_len]
     eng_vocab_cnt = {}
     chn_vocab_cnt = {}
     for eng, chn in train_tokenized:
@@ -93,6 +97,8 @@ def gen_dict(SOS, EOS, PAD, UNK, START_INDEX, batch_size=32, _eng_len=-1, _chn_l
     for eng, chn in test_tokenized:
         _eng = [eng_vocab[word] if word in eng_vocab else UNK for word in eng]
         _chn = [chn_vocab[word] if word in chn_vocab else UNK for word in chn]
+        if eng_len - len(_eng) - 2 < 0 or chn_len - len(_chn) - 2 < 0:
+            continue
         _eng = [eng_vocab["<sos>"]] + _eng + [eng_vocab["<eos>"]] + ([eng_vocab["<pad>"]] * (eng_len - len(_eng) - 2))
         _chn = [chn_vocab["<sos>"]] + _chn + [chn_vocab["<eos>"]] + ([chn_vocab["<pad>"]] * (chn_len - len(_chn) - 2))
         test_data_eng.append(_eng)
