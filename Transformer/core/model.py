@@ -10,7 +10,7 @@ class TransformerTranslator(torch.nn.Module):
     "Input: (batch_size, seq_len)"
     def __init__(self, source_vocab_size, target_vocab_size, 
                  source_seq_len, target_seq_len, 
-                 d_model, n_head, n_layer):
+                 d_model, n_head, n_layer, dropout=0.1):
         super().__init__()
         self.__source_vocab_size = source_vocab_size
         self.__target_vocab_size = target_vocab_size
@@ -19,12 +19,13 @@ class TransformerTranslator(torch.nn.Module):
         self.__d_model = d_model
         self.__n_head = n_head
         self.__n_layer = n_layer
+        self.__dropout = dropout
         self.encoder_embedding = torch.nn.Embedding(source_vocab_size, d_model)
         self.encoder_pos_encoder = PositionalEncodingLayer(d_model, source_seq_len)
-        self.encoder_layers = torch.nn.ModuleList([EncoderLayer(d_model, n_head) for _ in range(n_layer)])
+        self.encoder_layers = torch.nn.ModuleList([EncoderLayer(d_model, n_head, dropout=dropout) for _ in range(n_layer)])
         self.decoder_embedding = torch.nn.Embedding(target_vocab_size, d_model)
         self.decoder_pos_encoder = PositionalEncodingLayer(d_model, target_seq_len)
-        self.decoder_layers = torch.nn.ModuleList([DecoderLayer(d_model, n_head, target_seq_len) for _ in range(n_layer)])
+        self.decoder_layers = torch.nn.ModuleList([DecoderLayer(d_model, n_head, target_seq_len, dropout=dropout) for _ in range(n_layer)])
         self.output_linear = torch.nn.Linear(d_model, target_vocab_size, bias=False)
     
     def forward(self, _input, _output):
