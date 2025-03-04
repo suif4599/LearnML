@@ -38,7 +38,7 @@ class TransformerTranslator(torch.nn.Module):
         _output = self.decoder_embedding(_output)
         _output = self.decoder_pos_encoder(_output)
         for decoder_layer in self.decoder_layers:
-            _output = decoder_layer(_output, _input, output_padding_mask)
+            _output = decoder_layer(_output, _input, input_padding_mask, output_padding_mask)
         _output = self.output_linear(_output)
         return _output
     

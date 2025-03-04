@@ -64,10 +64,10 @@ class DecoderLayer(torch.nn.Module):
         self.add_and_norm3 = torch.nn.LayerNorm(d_model)
         self.dropout3 = torch.nn.Dropout(dropout)
     
-    def forward(self, x, encoder_output, mask=None):
-        x = self.add_and_norm1(x + self.masked_multi_head_attention(x, mask))
+    def forward(self, x, encoder_output, in_mask=None, out_mask=None):
+        x = self.add_and_norm1(x + self.masked_multi_head_attention(x, out_mask))
         x = self.dropout1(x)
-        x = self.add_and_norm2(x + self.encoder_decoder_attention(x, encoder_output, mask))
+        x = self.add_and_norm2(x + self.encoder_decoder_attention(x, encoder_output, in_mask))
         x = self.dropout2(x)
         x = self.add_and_norm3(x + self.feed_forward(x))
         x = self.dropout3(x)
