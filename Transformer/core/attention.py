@@ -18,7 +18,7 @@ class MultiHeadAttention(torch.nn.Module):
         self.W_Qi = torch.nn.ModuleList([torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)])
         self.W_Ki = torch.nn.ModuleList([torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)])
         self.W_Vi = torch.nn.ModuleList([torch.nn.Linear(d_model, self.__d_v, bias=False) for _ in range(n_head)])
-        self.output_linear = torch.nn.Linear(n_head * self.__d_v, d_model, bias=False)
+        self.output_linear = torch.nn.Linear(n_head * self.__d_v, d_model)
         self.dropout = torch.nn.Dropout(dropout)
         self.__seq_len = seq_len
         if future_mask:
@@ -33,7 +33,7 @@ class MultiHeadAttention(torch.nn.Module):
         """
         if self.__seq_len > 0:
             if mask is not None:
-                mask = mask.unsqueeze(1).unsqueeze(-1).expand(-1, self.__n_head, -1, self.__seq_len)
+                mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.__n_head, -1, self.__seq_len)
                 mask = mask + self.future_mask
             else:
                 mask = self.future_mask
@@ -73,7 +73,7 @@ class EncoderDecoderAttention(torch.nn.Module):
         self.W_Qi = [torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)]
         self.W_Ki = [torch.nn.Linear(d_model, self.__d_k, bias=False) for _ in range(n_head)]
         self.W_Vi = [torch.nn.Linear(d_model, self.__d_v, bias=False) for _ in range(n_head)]
-        self.output_linear = torch.nn.Linear(n_head * self.__d_v, d_model, bias=False)
+        self.output_linear = torch.nn.Linear(n_head * self.__d_v, d_model)
         self.dropout = torch.nn.Dropout(dropout)
     
     def forward(self, x, encoder_output, mask=None):
@@ -82,7 +82,6 @@ class EncoderDecoderAttention(torch.nn.Module):
         encoder_output: (batch_size, seq_len, d_model)
         mask: (batch_size, seq_len)
         """
-        mask = mask.unsqueeze(1).unsqueeze(-2)
         q = self.WQ(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).transpose(1, 2)
         # q: (batch_size, n_head, seq_len, d_k)
         k_T = self.WK(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_k).permute(0, 2, 3, 1)
@@ -92,7 +91,7 @@ class EncoderDecoderAttention(torch.nn.Module):
         scores = q @ k_T / self.__sqrt_d_k
         # scores: (batch_size, n_head, seq_len, seq_len)
         if mask is not None:
-            mask = mask[:, :, :, :scores.size(-1)]
+            mask = mask.unsqueeze(1).unsqueeze(2)
             scores = scores.masked_fill(mask != 0, -1e9)
         scores = self.dropout(scores)
         attention = F.softmax(scores, dim=-1)

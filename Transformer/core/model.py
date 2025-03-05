@@ -6,7 +6,7 @@ from time import time
 from datetime import datetime
 from .layer import PositionalEncodingLayer, EncoderLayer, DecoderLayer
 from .constants import *
-from data import tokenize
+from data import TranslateDataset, Language
 
 SAMPLE = ["I am a student.",
           "I'd like to have a cup of coffee.",
@@ -21,26 +21,26 @@ SAMPLE = ["I am a student.",
 
 class TransformerTranslator(torch.nn.Module):
     "Input: (batch_size, seq_len)"
-    def __init__(self, source_vocab, target_vocab, 
-                 source_seq_len, target_seq_len, 
+    def __init__(self, dataset: TranslateDataset, 
                  d_model, n_head, n_layer, dropout=0.1):
         super().__init__()
-        self.__source_vocab = source_vocab
-        self.__target_vocab = target_vocab
-        source_vocab_size = len(source_vocab)
-        target_vocab_size = len(target_vocab)
-        self.__source_seq_len = source_seq_len
-        self.__target_seq_len = target_seq_len
+        self.dataset = dataset
+        self.__source_vocab = dataset.eng_vocab
+        self.__target_vocab = dataset.chn_vocab
+        source_vocab_size = len(dataset.eng_vocab)
+        target_vocab_size = len(dataset.chn_vocab)
+        self.__source_seq_len = dataset.eng_len
+        self.__target_seq_len = dataset.chn_len
         self.__d_model = d_model
         self.__n_head = n_head
         self.__n_layer = n_layer
         self.__dropout = dropout
         self.encoder_embedding = torch.nn.Embedding(source_vocab_size, d_model)
-        self.encoder_pos_encoder = PositionalEncodingLayer(d_model, source_seq_len)
+        self.encoder_pos_encoder = PositionalEncodingLayer(d_model, self.__source_seq_len)
         self.encoder_layers = torch.nn.ModuleList([EncoderLayer(d_model, n_head, dropout=dropout) for _ in range(n_layer)])
         self.decoder_embedding = torch.nn.Embedding(target_vocab_size, d_model)
-        self.decoder_pos_encoder = PositionalEncodingLayer(d_model, target_seq_len)
-        self.decoder_layers = torch.nn.ModuleList([DecoderLayer(d_model, n_head, target_seq_len, dropout=dropout) for _ in range(n_layer)])
+        self.decoder_pos_encoder = PositionalEncodingLayer(d_model, self.__target_seq_len)
+        self.decoder_layers = torch.nn.ModuleList([DecoderLayer(d_model, n_head, self.__target_seq_len, dropout=dropout) for _ in range(n_layer)])
         self.output_linear = torch.nn.Linear(d_model, target_vocab_size, bias=False)
     
     def forward(self, _input, _output):
@@ -57,10 +57,12 @@ class TransformerTranslator(torch.nn.Module):
         _output = self.output_linear(_output)
         return _output
     
-    def start_training(self, train_loader, test_loader, epochs, optimizer, 
+    def start_training(self, epochs, optimizer, 
                        device=None, save_path=None, only_save_params=False):
         if save_path is None:
             warnings.warn("No save path provided, model will not be saved.")
+        train_loader = self.dataset.train_loader
+        test_loader = self.dataset.test_loader
         loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD)
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -88,8 +90,12 @@ class TransformerTranslator(torch.nn.Module):
                     total_loss += loss.item()
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(test_loader):.2f}, Train Loss: {train_loss:.2f}")
             t_test = time() - t_train - t
+            print("Sample translations:")
             for s in SAMPLE:
                 print(f"{s} -> {self.translate(s)}")
+            print("Train translation:")
+            src = self.dataset.rand_from_train()
+            print(f"{src[0]} -> {self.translate(src[0])}")
             print(f"Time: {t_train:.2f}s (train), {t_test:.2f}s (test)")
             if save_path is not None:
                 if only_save_params:
@@ -127,11 +133,9 @@ class TransformerTranslator(torch.nn.Module):
             output[:, i + 1] = _output[:, i].item()
         return output.squeeze(0).cpu().numpy()
     
-    def translate(self, src):
-        tar_rev_map = {v: k for k, v in self.__target_vocab.items()}
+    def translate(self, src: str):
         src = src.strip()
         if not src.endswith(".") or not src.endswith("?") or not src.endswith("!"):
             src += "."
-        tar = ''.join(tar_rev_map[i] for i in self.__translate(tokenize(src, UNK, self.__source_vocab, self.__source_seq_len)))
-        tar = tar.split("<eos>")[0].removeprefix("<sos>")
+        tar = self.dataset.untokenize(self.__translate(self.dataset.tokenize(src, Language.ENGLISH)), Language.CHINESE)
         return tar

@@ -1,1 +1,1 @@
-from .data import gen_dict, tokenize
+from .data import TranslateDataset, Language
