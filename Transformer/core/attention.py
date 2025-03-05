@@ -23,7 +23,7 @@ class MultiHeadAttention(torch.nn.Module):
         self.__seq_len = seq_len
         if future_mask:
             future_mask = torch.triu(torch.ones((seq_len, seq_len), dtype=torch.uint8), diagonal=1).\
-                unsqueeze(0).unsqueeze(0).expand(1, n_head, -1, -1)
+                unsqueeze(0).unsqueeze(0).expand(1, n_head, -1, -1) == 1
             self.register_buffer("future_mask", future_mask.clone())
     
     def forward(self, x, mask=None):
@@ -33,8 +33,8 @@ class MultiHeadAttention(torch.nn.Module):
         """
         if self.__seq_len > 0:
             if mask is not None:
-                mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.__n_head, self.__seq_len, self.__seq_len)
-                mask = mask + self.future_mask
+                mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, -1, self.__seq_len, self.__seq_len)
+                mask = mask + self.future_mask != 0
             else:
                 mask = self.future_mask
         else:
@@ -47,8 +47,7 @@ class MultiHeadAttention(torch.nn.Module):
         # v: (batch_size, n_head, seq_len, d_v)
         scores = q @ k_T / self.__sqrt_d_k
         # scores: (batch_size, n_head, seq_len, seq_len)
-        if mask is not None:
-            scores = scores.masked_fill((mask != 0), -1e9)
+        scores = scores.masked_fill(mask, -1e9)
         scores = self.dropout(scores)
         attention = F.softmax(scores, dim=-1)
         context = attention @ v
