@@ -48,7 +48,7 @@ class MultiHeadAttention(torch.nn.Module):
         scores = q @ k_T / self.__sqrt_d_k
         # scores: (batch_size, n_head, seq_len, seq_len)
         if mask is not None:
-            scores = scores.masked_fill((mask == 1), -1e9)
+            scores = scores.masked_fill((mask != 0), -1e9)
         scores = self.dropout(scores)
         attention = F.softmax(scores, dim=-1)
         context = attention @ v
