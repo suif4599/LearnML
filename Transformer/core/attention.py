@@ -33,12 +33,12 @@ class MultiHeadAttention(torch.nn.Module):
         """
         if self.__seq_len > 0:
             if mask is not None:
-                mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.__n_head, -1, self.__seq_len)
+                mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.__n_head, self.__seq_len, self.__seq_len)
                 mask = mask + self.future_mask
             else:
                 mask = self.future_mask
         else:
-            mask = mask.unsqueeze(1).unsqueeze(-1)
+            mask = mask.unsqueeze(1).unsqueeze(2)
         q = self.WQ(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).transpose(1, 2)
         # q: (batch_size, n_head, seq_len, d_k)
         k_T = self.WK(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).permute(0, 2, 3, 1)
