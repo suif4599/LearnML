@@ -41,15 +41,15 @@ class MultiHeadAttention(torch.nn.Module):
             mask = mask.unsqueeze(1).unsqueeze(2)
         q = self.WQ(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).transpose(1, 2)
         # q: (batch_size, n_head, seq_len, d_k)
-        k_T = self.WK(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).permute(0, 2, 3, 1)
+        k_T = self.WK(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).transpose(1, 2).transpose(2, 3)
         # k_T: (batch_size, n_head, d_k, seq_len)
         v = self.WV(x).view(x.size(0), x.size(1), self.__n_head, self.__d_v).transpose(1, 2)
         # v: (batch_size, n_head, seq_len, d_v)
         scores = q @ k_T / self.__sqrt_d_k
         # scores: (batch_size, n_head, seq_len, seq_len)
         scores = scores.masked_fill(mask, -1e9)
-        scores = self.dropout(scores)
         attention = F.softmax(scores, dim=-1)
+        attention = self.dropout(attention)
         context = attention @ v
         context = context.transpose(1, 2).contiguous().view(x.size(0), x.size(1), self.__d_model)
         return self.output_linear(context)
@@ -83,7 +83,7 @@ class EncoderDecoderAttention(torch.nn.Module):
         """
         q = self.WQ(x).view(x.size(0), x.size(1), self.__n_head, self.__d_k).transpose(1, 2)
         # q: (batch_size, n_head, seq_len, d_k)
-        k_T = self.WK(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_k).permute(0, 2, 3, 1)
+        k_T = self.WK(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_k).transpose(1, 2).transpose(2, 3)
         # k_T: (batch_size, n_head, d_k, seq_len)
         v = self.WV(encoder_output).view(encoder_output.size(0), encoder_output.size(1), self.__n_head, self.__d_v).transpose(1, 2)
         # v: (batch_size, n_head, seq_len, d_v)
@@ -92,8 +92,8 @@ class EncoderDecoderAttention(torch.nn.Module):
         if mask is not None:
             mask = mask.unsqueeze(1).unsqueeze(2)
             scores = scores.masked_fill(mask != 0, -1e9)
-        scores = self.dropout(scores)
         attention = F.softmax(scores, dim=-1)
+        attention = self.dropout(attention)
         context = attention @ v
         context = context.transpose(1, 2).contiguous().view(x.size(0), x.size(1), self.__d_model)
         return self.output_linear(context)

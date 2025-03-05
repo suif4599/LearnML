@@ -30,14 +30,14 @@ class EncoderLayer(torch.nn.Module):
         self.feed_forward = torch.nn.Sequential(
             torch.nn.Linear(d_model, 2 * d_model),
             torch.nn.ReLU(),
+            torch.nn.Dropout(dropout),
             torch.nn.Linear(2 * d_model, d_model)
         )
         self.add_and_norm2 = torch.nn.LayerNorm(d_model)
-        self.dropout = torch.nn.Dropout(dropout)
     
     def forward(self, x, mask=None):
         x = self.add_and_norm1(x + self.multi_head_attention(x, mask))
-        x = self.add_and_norm2(x + self.dropout(self.feed_forward(x)))
+        x = self.add_and_norm2(x + self.feed_forward(x))
         return x
     
 class DecoderLayer(torch.nn.Module):
@@ -54,13 +54,13 @@ class DecoderLayer(torch.nn.Module):
         self.feed_forward = torch.nn.Sequential(
             torch.nn.Linear(d_model, 2 * d_model),
             torch.nn.ReLU(),
+            torch.nn.Dropout(dropout),
             torch.nn.Linear(2 * d_model, d_model)
         )
-        self.dropout = torch.nn.Dropout(dropout)
         self.add_and_norm3 = torch.nn.LayerNorm(d_model)
     
     def forward(self, x, encoder_output, in_mask=None, out_mask=None):
         x = self.add_and_norm1(x + self.masked_multi_head_attention(x, out_mask))
         x = self.add_and_norm2(x + self.encoder_decoder_attention(x, encoder_output, in_mask))
-        x = self.add_and_norm3(x + self.dropout(self.feed_forward(x)))
+        x = self.add_and_norm3(x + self.feed_forward(x))
         return x
