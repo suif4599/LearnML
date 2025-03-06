@@ -29,8 +29,8 @@ class TransformerTranslator(torch.nn.Module):
         self.__target_vocab = dataset.chn_vocab
         source_vocab_size = len(dataset.eng_vocab)
         target_vocab_size = len(dataset.chn_vocab)
-        self.__source_seq_len = dataset.eng_len
-        self.__target_seq_len = dataset.chn_len
+        self.__source_seq_len = dataset.eng_len - 1
+        self.__target_seq_len = dataset.chn_len - 1
         self.__d_model = d_model
         self.__n_head = n_head
         self.__n_layer = n_layer
@@ -125,7 +125,7 @@ class TransformerTranslator(torch.nn.Module):
         output = [SOS] + [UNK] * (self.__target_seq_len - 1)
         output = torch.tensor(output).long().to(device).unsqueeze(0)
         for i in range(self.__target_seq_len - 1):
-            _output = self(sentence, output)
+            _output = self(sentence[:, :-1], output)
             _output = _output.argmax(dim=-1)
             if _output[:, i].item() == EOS:
                 output[:, i + 1] = EOS
