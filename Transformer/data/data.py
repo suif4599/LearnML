@@ -1,6 +1,7 @@
 import torch
 import os
 import gc
+import re
 import pyarrow.parquet as parquet
 import opencc
 import pandas as pd
@@ -13,6 +14,7 @@ class Language(Enum):
 
 class TranslateDataset(torch.utils.data.Dataset):
     "set max_rows to -1 to load all data"
+    LANGUAGE = Language
     def __init__(self, SOS=0, EOS=1, PAD=2, UNK=3, START_INDEX=4, *, 
                  batch_size=32, max_rows=200_000, 
                  min_eng_freq=None, min_chn_freq=None, 
@@ -48,7 +50,7 @@ class TranslateDataset(torch.utils.data.Dataset):
                 break
         self.data = _data.iloc[:max_rows]
         cc = opencc.OpenCC("t2s")
-        self.data.zh = self.data.zh.apply(cc.convert)
+        self.data.loc[:, "zh"] = self.data.zh.apply(cc.convert)
         self.rows = len(self.data)
         self.train_frac = train_frac
         del _data
@@ -109,9 +111,8 @@ class TranslateDataset(torch.utils.data.Dataset):
         self.test_loader = torch.utils.data.DataLoader(self.test, batch_size=batch_size, shuffle=True, drop_last=False)
         print("Data loaded")
     
-    def split_eng(self, data: str):
-        data = data.replace(".", " .").replace("?", " ?").replace("!", " !").replace(",", " ,").replace(";", " ;").replace(":", " :")
-        return data.lower().split()
+    def split_eng(self, data: str, regex=re.compile(r"[\w]+\b|[.,!?;:]")):
+        return re.findall(regex, data.lower())
 
     def tokenize(self, sentence: str, lang: Enum):
         if lang == Language.ENGLISH:
@@ -130,7 +131,6 @@ class TranslateDataset(torch.utils.data.Dataset):
     def untokenize(self, sentence: torch.Tensor, lang: Enum):
         if lang == Language.ENGLISH:
             res = ' '.join(self.eng_rev_map[i.item()] for i in sentence)
-            res.replace(" .", ".").replace(" ?", "?").replace(" !", "!").replace(" ,", ",").replace(" ;", ";").replace(" :", ":")
         elif lang == Language.CHINESE:
             res = ''.join(self.chn_rev_map[i.item()] for i in sentence)
         else:

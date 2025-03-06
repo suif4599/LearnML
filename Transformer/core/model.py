@@ -6,7 +6,8 @@ from time import time
 from datetime import datetime
 from .layer import PositionalEncodingLayer, EncoderLayer, DecoderLayer
 from .constants import *
-from data import TranslateDataset, Language
+from data import TranslateDataset
+Language = TranslateDataset.LANGUAGE
 
 SAMPLE = ["I am a student.",
           "I'd like to have a cup of coffee.",
@@ -24,6 +25,8 @@ class TransformerTranslator(torch.nn.Module):
     def __init__(self, dataset: TranslateDataset, 
                  d_model, n_head, n_layer, dropout=0.1):
         super().__init__()
+        global Language
+        Language = dataset.LANGUAGE
         self.dataset = dataset
         self.__source_vocab = dataset.eng_vocab
         self.__target_vocab = dataset.chn_vocab
@@ -135,7 +138,7 @@ class TransformerTranslator(torch.nn.Module):
     
     def translate(self, src: str):
         src = src.strip()
-        if not src.endswith(".") or not src.endswith("?") or not src.endswith("!"):
+        if not src.endswith(".") and not src.endswith("?") and not src.endswith("!"):
             src += "."
         tar = self.dataset.untokenize(self.__translate(self.dataset.tokenize(src, Language.ENGLISH)), Language.CHINESE)
         return tar
