@@ -1,8 +1,8 @@
 import torch
 import os
-import json
 import gc
 import re
+import pyarrow.parquet as parquet
 import opencc
 import pandas as pd
 from math import inf
@@ -34,13 +34,13 @@ class TranslateDataset(torch.utils.data.Dataset):
                     max_eng_vocab, max_chn_vocab, device, 
                     max_eng_len, max_chn_len, 
                     train_frac)
-        
+    
     def __init(self, SOS, EOS, PAD, UNK, START_INDEX, 
                batch_size, max_rows, 
                min_eng_freq, min_chn_freq, 
                max_eng_vocab, max_chn_vocab, device, 
                max_eng_len, max_chn_len, 
-               train_frac, vocab=None):
+               train_frac, __vocab=None):
         max_eng_len += 2
         max_chn_len += 2
         self.SOS = SOS
@@ -53,25 +53,20 @@ class TranslateDataset(torch.utils.data.Dataset):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
+        row = 0
         _data = pd.DataFrame(columns=["zh", "en"])
         print("loading data...")
-        train_path = os.path.join(os.path.dirname(__file__), "raw_data", "train.json")
-        file = []
-        with open(train_path, "r") as f:
-            while True:
-                try:
-                    file.extend(f.readlines(max_rows * 50))
-                except EOFError:
-                    break
-                if len(file) >= max_rows:
-                    break
-        file = ",".join(file)
-        file = eval(f'({file})')
-        _data = pd.DataFrame(file)
-        gc.collect()
-        _data.rename(columns={"english": "en", "chinese": "zh"}, inplace=True)
-        if max_rows > _data.shape[0]:
-            max_rows = _data.shape[0]
+        for i in range(28):
+            path = os.path.join(os.path.dirname(__file__), "raw_data", f"train-{i:>05}-of-00028.parquet")
+            if not os.path.exists(path):
+                break
+            data = parquet.ParquetDataset(path).read()
+            row += data.num_rows
+            _data = pd.concat([_data, data.to_pandas()])
+            del data
+            gc.collect()
+            if row >= max_rows > 0:
+                break
         self.data = _data.iloc[:max_rows]
         cc = opencc.OpenCC("t2s")
         self.data.loc[:, "zh"] = self.data.zh.apply(cc.convert)
@@ -80,7 +75,7 @@ class TranslateDataset(torch.utils.data.Dataset):
         del _data
         gc.collect()
         print("tokenizing data...")
-        if vocab is None:
+        if __vocab is None:
             eng_vocab_cnt = {}
             chn_vocab_cnt = {}
             for i in range(len(self.data)):
@@ -109,7 +104,7 @@ class TranslateDataset(torch.utils.data.Dataset):
             self.eng_vocab["<pad>"] = self.chn_vocab["<pad>"] = PAD
             self.eng_vocab["<unk>"] = self.chn_vocab["<unk>"] = UNK
         else:
-            self.eng_vocab, self.chn_vocab = vocab
+            self.eng_vocab, self.chn_vocab = __vocab
         self.eng_len = max(len(self.split_eng(self.data.iloc[i].en)) for i in range(len(self.data)))
         if self.eng_len > max_eng_len:
             self.eng_len = max_eng_len
@@ -137,10 +132,8 @@ class TranslateDataset(torch.utils.data.Dataset):
         self.train_loader = torch.utils.data.DataLoader(self.train, batch_size=batch_size, shuffle=True, drop_last=False)
         self.test_loader = torch.utils.data.DataLoader(self.test, batch_size=batch_size, shuffle=True, drop_last=False)
         print("Data loaded")
-        del self.data
-        gc.collect()
     
-    def split_eng(self, data: str, regex=re.compile(r"[.,!?;:\d'\"`\[\]+\-*/()&\^\\%$#@]|([\w]+\b)")):
+    def split_eng(self, data: str, regex=re.compile(r"[\w]+\b|[.,!?;:]")):
         return re.findall(regex, data.lower())
 
     def tokenize(self, sentence: str, lang: Enum):
@@ -174,7 +167,7 @@ class TranslateDataset(torch.utils.data.Dataset):
     def rand_from_test(self):
         eng, chn = self.test_loader.dataset[torch.randint(0, self.test_size, (1,)).item()]
         return self.untokenize(eng, Language.ENGLISH), self.untokenize(chn, Language.CHINESE)
-
+    
     def __getstate__(self):
         state = self.__dict__.copy()
         state["dataset"] = None
@@ -185,7 +178,7 @@ class TranslateDataset(torch.utils.data.Dataset):
         return state
     
     def reload(self):
-        self.__init(**self.__metadata, vocab=(self.eng_vocab, self.chn_vocab))
+        self.__init(**self.__metadata, __vocab=(self.eng_vocab, self.chn_vocab))
         return self
 
 # dataset = TranslateDataset(min_eng_freq=5e-5,

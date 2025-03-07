@@ -1,5 +1,4 @@
 __pycache__/
-*.pt
-*.pth
-*.onnx
+model_save/
 *.parquet
+*.json

@@ -1,7 +1,9 @@
 import torch
 import os
+import pickle
 import warnings
 import tqdm
+import json
 from time import time
 from datetime import datetime
 from .layer import PositionalEncodingLayer, EncoderLayer, DecoderLayer
@@ -45,6 +47,8 @@ class TransformerTranslator(torch.nn.Module):
         self.decoder_pos_encoder = PositionalEncodingLayer(d_model, self.__target_seq_len)
         self.decoder_layers = torch.nn.ModuleList([DecoderLayer(d_model, n_head, self.__target_seq_len, dropout=dropout) for _ in range(n_layer)])
         self.output_linear = torch.nn.Linear(d_model, target_vocab_size, bias=False)
+        self.__metadata = {"d_model": d_model, "n_head": n_head, "n_layer": n_layer, "dropout": dropout}
+        self.__train_log = {}
     
     def forward(self, _input, _output):
         input_padding_mask = (_input == PAD)
@@ -60,8 +64,9 @@ class TransformerTranslator(torch.nn.Module):
         _output = self.output_linear(_output)
         return _output
     
-    def start_training(self, epochs, optimizer, 
-                       device=None, save_path=None, only_save_params=False):
+    def start_training(self, epochs, optimizer, lr_scheduler=None,
+                       device=None, save_path=None, model_name=None, 
+                       save_each_num_epoch=1):
         if save_path is None:
             warnings.warn("No save path provided, model will not be saved.")
         train_loader = self.dataset.train_loader
@@ -71,10 +76,18 @@ class TransformerTranslator(torch.nn.Module):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self = self.to(device)
         print(f"Training on {device}")
+        log = {}
+        t = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        self.__train_log[f"train_{t}"] = log
+        log["device"] = str(device)
         for epoch in range(epochs):
             self.train()
             t = time()
             train_loss = 0
+            data = {"epoch": epoch + 1, 
+                    "start_time": datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                    "lr": optimizer.param_groups[0]["lr"]
+                    }
             for _input, _output in tqdm.tqdm(train_loader, total=len(train_loader)):
                 optimizer.zero_grad()
                 output = self(_input[:, :-1], _output[:, :-1])
@@ -82,9 +95,13 @@ class TransformerTranslator(torch.nn.Module):
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
+            if lr_scheduler is not None:
+                lr_scheduler.step()
             self.eval()
             t_train = time() - t
             train_loss = train_loss / len(train_loader)
+            data["train_loss"] = train_loss
+            data["train_duration"] = t_train
             with torch.no_grad():
                 total_loss = 0
                 for _input, _output in test_loader:
@@ -93,6 +110,9 @@ class TransformerTranslator(torch.nn.Module):
                     total_loss += loss.item()
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(test_loader):.2f}, Train Loss: {train_loss:.2f}")
             t_test = time() - t_train - t
+            data["test_loss"] = total_loss / len(test_loader)
+            data["test_duration"] = t_test
+            log[f"epoch_{epoch + 1}"] = data
             print("Sample translations:")
             for s in SAMPLE:
                 print(f"{s} -> {self.translate(s)}")
@@ -100,23 +120,47 @@ class TransformerTranslator(torch.nn.Module):
             src = self.dataset.rand_from_train()
             print(f"{src[0]} -> {self.translate(src[0])}")
             print(f"Time: {t_train:.2f}s (train), {t_test:.2f}s (test)")
-            if save_path is not None:
-                if only_save_params:
-                    torch.save(self.state_dict(), os.path.join(save_path, f"model_{datetime.now().strftime('%Y%m%d%H%M%S')}_epoch{epoch + 1}.pt"))
+            if (epoch + 1) % save_each_num_epoch == 0 and save_path is not None:
+                if model_name is None:
+                    self.save(save_path)
                 else:
-                    torch.save(self, os.path.join(save_path, f"model_{datetime.now().strftime('%Y%m%d%H%M%S')}_epoch{epoch + 1}.pth"))
+                    self.save(save_path, model_name)
         return self
     
     @classmethod
-    def load(cls, file, *args, **kwargs):
-        if os.path.splitext(file)[-1] == ".pth":
-            return torch.load(file)
-        if os.path.splitext(file)[-1] == ".pt":
-            model = cls(*args, **kwargs)
-            model.load_state_dict(torch.load(file, weights_only=True))
-            return model
-        raise ValueError("Invalid file format")
+    def load(cls, folder: str):
+        if not os.path.exists(folder):
+            raise FileNotFoundError(f"Folder {folder} does not exist")
+        with open(os.path.join(folder, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        with open(os.path.join(folder, "train_log.json"), "r") as f:
+            train_log = json.load(f)
+        with open(os.path.join(folder, "dataset.pkl"), "rb") as f:
+            dataset = pickle.load(f)
+        model = cls(dataset, **metadata)
+        model.load_state_dict(torch.load(os.path.join(folder, "model.pt"), weights_only=True))
+        train_log["load_time"] = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        model.set_log(train_log)
+        return model
     
+    def set_log(self, log):
+        self.__train_log = log
+
+    def save(self, folder: str, model_name: str = "TransformerTranslator"):
+        if not os.path.exists(folder):
+            raise FileNotFoundError(f"Folder {folder} does not exist")
+        folder_name = os.path.join(folder, f"{model_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        os.makedirs(folder_name)
+        torch.save(self.state_dict(), os.path.join(folder_name, "model.pt"))
+        with open(os.path.join(folder_name, "dataset.pkl"), "wb") as f:
+            pickle.dump(self.dataset, f)
+        with open(os.path.join(folder_name, "metadata.json"), "w") as f:
+            json.dump(self.__metadata, f, indent=4, separators=(", ", ": "))
+        with open(os.path.join(folder_name, "train_log.json"), "w") as f:
+            json.dump(self.__train_log, f, indent=4, separators=(", ", ": "))
+        return folder_name
+        
+
     def __translate(self, sentence, device=None):
         if not isinstance(sentence, torch.Tensor):
             sentence = torch.tensor(sentence).long()
