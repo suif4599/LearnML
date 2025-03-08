@@ -4,9 +4,6 @@ import pickle
 import warnings
 import tqdm
 import json
-import smtplib
-from email.mime.text import MIMEText
-from email.header import Header
 from time import time
 from datetime import datetime
 from .layer import PositionalEncodingLayer, EncoderLayer, DecoderLayer
@@ -70,7 +67,11 @@ class TransformerTranslator(torch.nn.Module):
     def start_training(self, epochs, optimizer, lr_scheduler=None,
                        device=None, save_path=None, model_name=None, 
                        save_each_num_epoch=1, 
-                       send_mail=False, mail_host=None, mail_password=None):
+                       mail_server=None):
+        if mail_server:
+            content = "Training started\nmetadata:\n"
+            content += json.dumps(self.__metadata, indent=4, separators=(", ", ": "))
+            mail_server.send("TransformerTranslator", content)
         if save_path is None:
             warnings.warn("No save path provided, model will not be saved.")
         train_loader = self.dataset.train_loader
@@ -117,20 +118,27 @@ class TransformerTranslator(torch.nn.Module):
             data["test_loss"] = total_loss / len(test_loader)
             data["test_duration"] = t_test
             log[f"epoch_{epoch + 1}"] = data
-            print("Sample translations:")
-            for s in SAMPLE:
-                print(f"{s} -> {self.translate(s)}")
-            print("Train translation:")
-            src = self.dataset.rand_from_train()
-            print(f"{src[0]} -> {self.translate(src[0])}")
             print(f"Time: {t_train:.2f}s (train), {t_test:.2f}s (test)")
             if (epoch + 1) % save_each_num_epoch == 0 and save_path is not None:
                 if model_name is None:
                     self.save(save_path)
                 else:
                     self.save(save_path, model_name)
-            if send_mail and mail_host is not None and mail_password is not None:
-                self.send_mail(mail_host, mail_password, data)
+            if mail_server:
+                content = json.dumps(data, indent=4, separators=(", ", ": "))
+                content += "\n\nSample translations:\n"
+                for s in SAMPLE:
+                    content += f"{s} -> {self.translate(s)}\n"
+                src = self.dataset.rand_from_train()
+                content += f"\nTrain translation:\n{src[0]} -> {self.translate(src[0])}"
+                mail_server.send("TransformerTranslator", content)
+            else:
+                print("Sample translations:")
+                for s in SAMPLE:
+                    print(f"{s} -> {self.translate(s)}")
+                print("Train translation:")
+                src = self.dataset.rand_from_train()
+                print(f"{src[0]} -> {self.translate(src[0])}")
         return self
     
     @classmethod
@@ -193,13 +201,3 @@ class TransformerTranslator(torch.nn.Module):
         tar = self.dataset.untokenize(self.__translate(self.dataset.tokenize(src, Language.ENGLISH)), Language.CHINESE)
         return tar
     
-    def send_mail(self, host: str, password: str, content: dict):
-        content = json.dumps(content, indent=2, separators=(", ", ": "))
-        message = MIMEText(content, "plain", "utf-8")
-        message["From"] = Header("Transformer", "utf-8")
-        message["To"] = Header("User", "utf-8")
-        message["Subject"] = Header("Training Report", "utf-8")
-        server = smtplib.SMTP_SSL(host.split("@")[1], 465)
-        server.login(host, password)
-        server.sendmail(host, host, message.as_string())
-        server.quit()
