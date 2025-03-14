@@ -2,3 +2,5 @@ __pycache__/
 model_save/
 *.parquet
 *.json
+*ubyte
+*ubyte.gz
