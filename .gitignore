@@ -4,3 +4,4 @@ model_save/
 *.json
 *ubyte
 *ubyte.gz
+*.safetensors

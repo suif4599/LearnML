@@ -45,6 +45,8 @@ if enable_email:
     mail_server.register("show", show, "Show all models saved")
     mail_server.register("delete", delete, "Delete a model")
     mail_server.send("Info", "main.py started")
+else:
+    mail_server = None
 
 # dataset = TranslateDataset(SOS, EOS, PAD, UNK, START_INDEX, 
 #                            batch_size=32, min_freq=2, 
